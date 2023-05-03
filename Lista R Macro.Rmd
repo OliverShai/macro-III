@@ -1,0 +1,967 @@
+---
+title: "Lista 1 de Macro III"
+author: "Shai Vaz"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Exercício 1
+## Letra a
+Definições de cada P.E.:
+
+### Ruído Branco 
+É um P.E. $u_t$ com as seguintes características:
+
+\[
+\mathbb{E}[u_t] = 0 
+\]
+
+\[
+\mathbb{V}[u_t] = \sigma^2 
+\]
+
+\[
+\mathbb{COV}(u_t, u_{t-k}) = 0, \forall t,k
+\]
+
+Frequentemente isso é realizado utilizando uma distribuição normal padrão, ou seja, $u_t \sim \mathcal{N}(0,1)$. O ruído branco é um processo puramente aleatório, não apresentando nenhum nível de persistência -- isto é, o que ocorre no período $t$ não influencia o que ocorre em nenhum outro período posterior (ou anterior). 
+
+### Média Móvel de ordem 1, MA(1)
+É um P.E. $y_t$ tal que:
+\[
+y_t = \mu + u_t + \theta_1 u_{t-1}
+\]
+
+Onde $\mu$ é a média do processo, $\theta_1$ é um parâmetro que mede o grau de persistência do choque do período $t-1$ para o período $t$, e $u_t$, $u_{t-1}$ são ruídos brancos, representando choques imprevisíveis. Assim, o MA(1) apresenta autocorrelação positiva, mas apenas entre períodos consecutivos.
+
+
+### Média Móvel de grau 3, MA(3)
+Semelhante ao MA(1), mas com os choques $u_t$, representados por ruídos brancos, persistindo por 3 períodos ao invés de apenas 1. Assim, pode ser escrito da forma seguinte:
+\[
+y_t = \mu + u_t + \theta_1 u_{t-1} + \theta_2 u_{t-2} + \theta_3 u_{t-3}
+\]
+
+Esse processo apresenta autocorrelação do período $t$ com até três períodos de distência dele, mas essa autocorrelação cessa quando é medida para mais do que 3 períodos. 
+
+### Autoregressivo de ordem 1, AR(1)
+Escrito sob a forma de uma equação de diferenças de primeira ordem, tem uma redução suave da persistência dos choques entre os períodos, gradualmente convergindo a 0 (satisfeitas algumas hipóteses):
+
+\[
+y_t = \phi_0 + \phi_1 y_{t-1} + u_{t}
+\]
+
+Supondo $t \to \infty$, $y_0$ finito e $\mid \phi_1 \mid < 1$, podemos escrever um AR de ordem 1 como um MA de ordem infinita:
+
+\[
+y_t = \frac{\phi_0}{1-\phi_1} + u_t + \phi_1 u_{t-1} + \phi_1 ^2 u_{t-2} + \phi_1^3 u_{t-3} + \cdots
+\]
+
+Vemos que há um grau de autocorrelação com todos os (infinitos) períodos, mas o efeito de um choque em $t$ vai diminuindo de intensidade conforme se distancia dele no tempo. Isto é, há persistência, mas ela converge suavemente a 0, sem uma queda brusca como nos processos de tipo média móvel de ordem finita. 
+
+## Letra b
+Os processos de ruído branco não servem para modelar muitos MGDs, pois são puramente aleatórios, e espera-se que haja algum grau de persistência nas variáveis macroeconômicas. Já os processos do tipo média móvel têm autocorrelação que zera de forma abrupta, após certa defasagem de períodos. Mas na maior parte das variáveis macroeconômicas espera-se que a autocorrelação gradualmente vá reduzindo, em uma lenta convergência a 0. Assim, o tipo de processo mais utilizado na modelagem do MGD de variáveis macroeconômicas é o AR(1), pois ele gera séries cujos choques tem efeitos duradouros, mas com intensidade cada vez menor, o que é muito mais realista. 
+
+## Letra c
+De imediato, vê-se pelo parâmetro $\phi_1$ de cada processo que a persistência é muito maior no processo $a_1$ do que no processo $x_1$, isto é, que os choques resuntantes do ruído branco permancem afetando períodos futuros de forma muito mais intensa no primeiro processo do que no segundo. Podemos ser mais precisos, analisando a chamada Função de Resposta a Impulso. Primeiro, representamos cada processo em sua forma MA($\infty$):
+
+\[
+a_t = u_t + 0.9 u_{t-1} + 0.9 ^2 u_{t-2} + 0.9^3 u_{t-3} + \cdots
+\]
+
+\[
+x_t = u_t + 0.3 u_{t-1} + 0.3 ^2 u_{t-2} + 0.3^3 u_{t-3} + \cdots
+\]
+
+Portanto temos que as funções de resposta a impulso são:
+\[
+\text{FRI}_{a_t} = \delta_k^{a_t} = \frac{\partial a_{t+k}}{\partial u_t} = 0.9^k
+\]
+
+\[
+\text{FRI}_{x_t} = \delta_k^{x_t} = \frac{\partial x_{t+k}}{\partial u_t} = 0.3^k
+\]
+
+Assim, vemos que o impulso de um $u_t$ teria um efeito muito mais persistente nas variáveis do modelo caso utilizassemos o processo $a_t$ como choque, ao invés do processo $x_t$. Podemos visualizar essa diferença plotando um gráfico das F.R.I. (de forma contínua, para simplificar). Em azul temos a FRI do processo $a_t$, e em roxo a FRI do processo $x_t$. Vemos que o impacto de uma variação em $u_t$ cai muito mais rápido no processo $x_t$. 
+
+```{r}
+curve(0.3^x, from = 0, to = 15, col = "purple", ylab = "F.R.I. contínua", lwd = 2)
+curve(0.9^x, add=TRUE, col = "blue", lwd=2)
+```
+
+
+# Exercício 2
+## Letra a
+
+```{r, warning=FALSE, collapse=TRUE, message=FALSE}
+library("sidrar")
+library("tidyr")
+library("ggplot2")
+library("dplyr")
+library("knitr")
+library("forecast")
+library("mFilter")
+```
+
+Importamos os dados das contas nacionais trimestrais:
+```{r}
+cod_sidra <- "/t/1621/n1/all/v/all/p/all/c11255/all/d/v584%202"
+dados <- sidrar::get_sidra(api = cod_sidra)
+```
+
+Organizando os dados, separando os setores em colunas e transformando em série temporal. 
+```{r}
+df=cbind(dados[,c(5,10,12)])
+colnames(df)=c("valor","tri","setor")
+df2 = pivot_wider(df, names_from = setor, values_from = valor)
+df3=ts(df2[,-1],start=c(1996,1),frequency = 4)
+```
+
+Organizando cada variável em um df separado.
+```{r}
+# PIB
+y_pm=df3[,"90707"]
+# VA - AGROPECUARIA
+ys_agr=df3[,"90687"]
+# VA - INDUSTRIA
+ys_ind=df3[,"90691"]
+# VA - SERVIÇOS
+ys_ser=df3[,"90696"]
+# CONSUMO DAS FAMILIAS
+yd_cf=df3[,"93404"]
+# CONSUMO DO GOVERNO
+yd_cg=df3[,"93405"]
+# FBCF (INVESTIMENTO)
+yd_fbcf=df3[,"93406"]
+# EXPORTAÇOES
+yd_exp=df3[,"93407"]
+# IMPORTAÇÕES
+yd_imp=df3[,"93408"]
+```
+
+
+## Letra b
+Veremos em **preto** a série original e em $\color{orange}{\text{laranja}}$ a tendência estimada pelo filtro HP. 
+
+### PIB
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(y_pm, filter="HP")
+# salva o componente tendencial
+y_pmt = fitted(c)
+# salva o componente ciclico
+y_pmc = resid(c)
+```
+
+```{r, message=FALSE}
+#y_pmt vs y_pm
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = y_pmt, 
+            aes(x=time(y_pmt), 
+                y=y_pmt), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = y_pm, 
+            aes(x=time(y_pm), 
+                y=y_pm), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: PIB"
+  )
+
+```
+
+### VA da Agropecuária
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(ys_agr, filter="HP")
+# salva o componente tendencial
+ys_agrt = fitted(c)
+# salva o componente ciclico
+ys_agrc = resid(c)
+```
+
+```{r, message=FALSE}
+#ys_agrt vs ys_agr
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = ys_agrt, 
+            aes(x=time(ys_agrt), 
+                y=ys_agrt), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = ys_agr, 
+            aes(x=time(ys_agr), 
+                y=ys_agr), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: VA da Agropecuária"
+  )
+```
+
+### VA da Indústria
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(ys_ind, filter="HP")
+# salva o componente tendencial
+ys_indt = fitted(c)
+# salva o componente ciclico
+ys_indc = resid(c)
+```
+
+```{r, message=FALSE}
+#ys_indt vs ys_ind
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = ys_indt, 
+            aes(x=time(ys_indt), 
+                y=ys_indt), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = ys_ind, 
+            aes(x=time(ys_ind), 
+                y=ys_ind), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: VA da Indústria"
+  )
+```
+
+### VA dos Serviços
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(ys_ser, filter="HP")
+# salva o componente tendencial
+ys_sert = fitted(c)
+# salva o componente ciclico
+ys_serc = resid(c)
+```
+
+```{r, message=FALSE}
+#ys_sert vs ys_ser
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = ys_sert, 
+            aes(x=time(ys_sert), 
+                y=ys_sert), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = ys_ser, 
+            aes(x=time(ys_ser), 
+                y=ys_ser), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: VA dos Serviços"
+  )
+```
+
+### Consumo das Famílias
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(yd_cf, filter="HP")
+# salva o componente tendencial
+yd_cft = fitted(c)
+# salva o componente ciclico
+yd_cfc = resid(c)
+```
+
+```{r, message=FALSE}
+#yd_cft vs yd_cf
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = yd_cft, 
+            aes(x=time(yd_cft), 
+                y=yd_cft), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = yd_cf, 
+            aes(x=time(yd_cf), 
+                y=yd_cf), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: Consumo das Famílias"
+  )
+```
+
+### Consumo do Governo
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(yd_cg, filter="HP")
+# salva o componente tendencial
+yd_cgt = fitted(c)
+# salva o componente ciclico
+yd_cgc = resid(c)
+```
+
+```{r, message=FALSE}
+#yd_cgt vs yd_cg
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = yd_cgt, 
+            aes(x=time(yd_cgt), 
+                y=yd_cgt), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = yd_cg, 
+            aes(x=time(yd_cg), 
+                y=yd_cg), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: Consumo do Governo"
+  )
+```
+
+### Formação Bruta de Capital Fixo
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(yd_fbcf, filter="HP")
+# salva o componente tendencial
+yd_fbcft = fitted(c)
+# salva o componente ciclico
+yd_fbcfc = resid(c)
+```
+
+```{r, message=FALSE}
+#yd_fbcft vs yd_fbcf
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = yd_fbcft, 
+            aes(x=time(yd_fbcft), 
+                y=yd_fbcft), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = yd_fbcf, 
+            aes(x=time(yd_fbcf), 
+                y=yd_fbcf), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: F.B.C.F."
+  )
+```
+
+### Exportações
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(yd_exp, filter="HP")
+# salva o componente tendencial
+yd_expt = fitted(c)
+# salva o componente ciclico
+yd_expc = resid(c)
+```
+
+```{r, message=FALSE}
+#yd_expt vs yd_exp
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = yd_expt, 
+            aes(x=time(yd_expt), 
+                y=yd_expt), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = yd_exp, 
+            aes(x=time(yd_exp), 
+                y=yd_exp), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: Exportações"
+  )
+```
+
+### Importações 
+
+```{r}
+# Aplica o filtro HP
+c = mFilter(yd_imp, filter="HP")
+# salva o componente tendencial
+yd_impt = fitted(c)
+# salva o componente ciclico
+yd_impc = resid(c)
+```
+
+```{r, message=FALSE}
+#yd_impt vs yd_imp
+
+ggplot() +
+  theme_minimal()+
+  geom_line(data = yd_impt, 
+            aes(x=time(yd_impt), 
+                y=yd_impt), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_line(data = yd_imp, 
+            aes(x=time(yd_imp), 
+                y=yd_imp), 
+            linewidth = 1,
+            color = "black") +
+  labs(
+    x="",
+    y="",
+    title = "Estimação do Componente de Tendência: Importações"
+  )
+```
+
+
+
+## Letra c
+```{r}
+merged_cicles = ts.union(
+  y_pmc,
+  ys_agrc,
+  ys_indc,
+  ys_serc,
+  yd_cfc,
+  yd_cgc,
+  yd_fbcfc,
+  yd_expc,
+  yd_impc,
+  dframe = TRUE) 
+```
+
+```{r}
+merged_cicles %>% 
+  summarise(across(everything(), sd)) %>% 
+  rename(
+    "PIB" = y_pmc,
+  "VA agro" = ys_agrc,
+  "VA ind" = ys_indc,
+  "VA serv" = ys_serc,
+  "Consumo fam" = yd_cfc,
+  "Consumo gov" = yd_cgc,
+  "FBCF" = yd_fbcfc,
+  "Export" = yd_expc,
+  "Import" = yd_impc
+  ) %>% 
+  pivot_longer(cols = everything(), values_to = "sd") %>% 
+  mutate(sd_y =  sd/sd[1]*100) %>%
+  select(!sd) %>% 
+  arrange(sd_y) %>% 
+  knitr::kable(digits = 2, 
+               col.names = c("Componente Cíclico",
+                             "SD Proporcional (%)"),
+               caption = "Desvio padrão como % do desvio padrão do PIB")
+```
+
+Portanto, vemos que são menos voláteis que o PIB às séries de **Consumo do Governo e Valor Agregado dos Serviços**. Por outro lado, são mais voláteis que o PIB (em ordem crescente de volatilidade) as séries de **Consumo das Famílias, Valor Agregado da Indústria, Valor Agregado da Agropecuária, FBCF (Investimento), Exportações e Importações**. 
+
+Os fatos estilizados para o caso americano, para as variáveis da ótica da demanda, indicam que **consumo privado e consumo do governo** são menos volátil que o PIB, enquanto **investimento, exportações e importações** são mais voláteis. Para a maior parte das séries isso é válido também para a experiência brasileira, mas diferenças se apresentam em relação à americana no caso do **consumo privado**, que é mais volátil aqui.  
+
+## Letra d
+### Função de Autocorrelação dos Ciclos
+```{r}
+# VAriáveis de Ciclos
+cicles = ts.union(
+  y_pmc,
+  ys_agrc,
+  ys_indc,
+  ys_serc,
+  yd_cfc,
+  yd_cgc,
+  yd_fbcfc,
+  yd_expc,
+  yd_impc)
+
+# Titles
+t_cicles = c(
+   "PIB",
+  "VA agro" ,
+  "VA ind" ,
+  "VA serv",
+  "Consumo fam",
+  "Consumo gov",
+  "FBCF",
+  "Export",
+  "Import"
+)
+```
+
+
+```{r}
+par(fig = c(0.05, 0.95, 0.05, 0.95),
+  mar = c(2, 3, 4, 2))
+
+layout(matrix(1:9, ncol=3))
+
+for(i in 1:9){
+  a = Acf(cicles[,i], plot = FALSE)
+  plot(a,
+       lwd = 3,
+       ylim = c(-0.4, 1),
+       main = t_cicles[i]) 
+  }
+```
+```{r}
+# A função Acf não pdoe ser utilizada no summarise
+# Fazemos uma versão que retorna um valor numérico único
+acf1 <- function(ts){
+  as.numeric( 
+    as.character( 
+      Acf( ts,
+           plot = FALSE, 
+           lag.max = 1)[1])[1])
+}
+```
+
+```{r}
+merged_cicles %>% 
+  summarise(across(everything(), acf1)) %>% 
+  rename(
+    "PIB" = y_pmc,
+  "VA agro" = ys_agrc,
+  "VA ind" = ys_indc,
+  "VA serv" = ys_serc,
+  "Consumo fam" = yd_cfc,
+  "Consumo gov" = yd_cgc,
+  "FBCF" = yd_fbcfc,
+  "Export" = yd_expc,
+  "Import" = yd_impc
+  ) %>% 
+  pivot_longer(cols = everything(), values_to = "acf1") %>%
+  knitr::kable(digits = 3, 
+               col.names = c("Componente Cíclico",
+                             "ACF(1)"),
+               caption = "Autocorrelação de Primeira Ordem de cada ciclo")
+
+```
+
+As séries "mais persistentes", a partir de uma análise visual, são **PIB, VA dos Serviços, Consumo das Famílias** e sobretudo **FBCF**. 
+
+## Letra e
+Calculando o coeficiente de correlação entre os componentes cíclicos e o PIB.
+
+```{r}
+merged_cicles %>% 
+  cor() %>%
+  as_tibble(rownames = NA) %>% 
+  slice(1) %>% 
+  rename(
+    "PIB" = y_pmc,
+  "VA agro" = ys_agrc,
+  "VA ind" = ys_indc,
+  "VA serv" = ys_serc,
+  "Consumo fam" = yd_cfc,
+  "Consumo gov" = yd_cgc,
+  "FBCF" = yd_fbcfc,
+  "Export" = yd_expc,
+  "Import" = yd_impc
+  ) %>%
+  pivot_longer(cols = everything(), values_to = "cor") %>%
+  arrange(desc(cor)) %>% 
+  knitr::kable(digits = 3, 
+               col.names = c("Componente Cíclico",
+                             "Cor(. , PIB)"),
+               caption = "Coeficiente de correlação com o ciclo do PIB")
+```
+Vemos que as séries mais correlacionadas com o PIB são **VA dos Serviços, VA da Indústria, Consumo das Famílias e FBCF**. Também vemos que nenhuma variável é anticíclica, pois todos os coeficientes de correlação são positivos. Agora vamos aos gráficos comparando os componentes cíclicos com o PIB. Veremos em **preto** a série do PIB e em $\color{orange}{\text{laranja}}$ a série analisada. 
+
+
+### VA Agropecuária
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = ys_agrc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs VA Agropecuária")
+
+```
+
+As séries aparentam ser pouco correlacionadas entre si. Pode haver algum grau de anticiclicidade, mas não é muito claro pelo gráfico.
+
+### VA da Indústria
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = ys_indc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs VA Indústria")
+```
+A série é claramente altamente correlacionada com o PIB, coincidente e pró-cíclica.
+
+### VA dos Serviços
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = ys_serc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs VA Serviços")
+```
+A série é altamente correlacionada com o PIB, e apresenta simultaneidade e pró-ciclicidade.
+
+### Consumo das Famílias
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = yd_cfc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs Consumo das Famílias")
+```
+Aparenta ser uma série simultânea com o PIB, além de pró-cíclica.
+
+### Consumo do Governo
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = yd_cgc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs Consumo do Governo")
+```
+A série mostra pouca correlação com o PIB, mas pode-se ver um grau de pró-ciclicidade -- diferentemente do fato estilizado no caso da economia americana.
+
+### FBCF
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = yd_fbcfc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs FBCF (Investimento)")
+```
+A série parece razoavelmente correlacionada com o PIB, mas com volatilidade muito maior. Além disso, parece ser coincidente e pró-cíclica. 
+
+### Exportações
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = yd_expc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs Exportações")
+```
+A série é bastante volátil e é bem difícil apreender muita informação apenas analisando o gráfico. A corrrelação parece ser baixa, como já vimos.
+
+
+### Importações
+```{r}
+ggplot() +
+  theme_minimal()+
+  geom_line(aes(x=time(y_pmc), 
+                y=y_pmc),
+            linewidth = 1,
+            color = "black") +
+  
+  geom_line(aes(x = time(y_pmc), 
+                y = yd_impc), 
+            linewidth = 1, 
+            color = "orange") +
+  
+  geom_hline(yintercept = 0) +
+  
+  labs(
+    x="",
+    y="",
+    title = "Ciclos: PIB vs Importações")
+```
+Parece haver certo grau de correlação da série com o PIB, além de pró-ciclicidade e coincidência. 
+
+## Letra f
+
+### VA da Agropecuária
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(ys_agrc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), VA_agr(t+h) )",
+    xlab="h")
+```
+Aqui, a única correlação estatisticamente significante é a em $h=0$, que é a correlação simples, que já vimos ser baixa. Portanto, não há forte correlação entre as duas séries.
+
+### VA da Indústria
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(ys_indc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), VA_ind(t+h) )",
+    xlab="h")
+```
+Reforça a tese que a série é pró-ciclica e coincidente.
+### VA dos Serviços
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(ys_serc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), VA_ser(t+h) )",
+    xlab="h")
+```
+Também reforça a hipótese do item anterior. 
+
+### Consumo das Famílias
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(yd_cfc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), CF(t+h) )",
+    xlab="h")
+```
+Também parece confirmar a conclusão anterior. Podemos notar também uma leve defasagem.
+
+### Consumo do Governo
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(yd_cgc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), CG(t+h) )",
+    xlab="h")
+```
+### FBCF (Investimento)
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(yd_fbcfc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), FBCF(t+h) )",
+    xlab="h")
+```
+Confirma as conclusões anteriores, e adiciona a informação de um leve grau de antecedência na série.
+### Exportações 
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(yd_expc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), Exp(t+h) )",
+    xlab="h")
+```
+Essa série parece apresentar leve defasagem, mas a correlação sendo baixa, não parece uma informação significante. 
+
+### Importações
+```{r}
+par(mar =c(5,3,4,3))
+Ccf(yd_impc,
+    y_pmc,
+    12,
+    lwd=3,
+    main="Corr( PIB(t), Imp(t+h) )",
+    xlab="h")
+```
+Fica claro não a conclusão de correlação forte, com pró-ciclicidade, e também percebemos um efeito de persistência cíclica -- há efeito positivo forte no curto prazo, mas após 6 períodos há um efeito, mais fraco, negativo de variações no PIB. 
+
+## Letra g
+Essas tabelas já foram feitas em exercícios anteriores, mas apresentar os dados novamente de forma mais organizada e completa.
+
+```{r}
+sd_y <- merged_cicles %>% 
+  summarise(across(everything(), sd)) %>% 
+  rename(
+    "PIB" = y_pmc,
+  "VA agro" = ys_agrc,
+  "VA ind" = ys_indc,
+  "VA serv" = ys_serc,
+  "Consumo fam" = yd_cfc,
+  "Consumo gov" = yd_cgc,
+  "FBCF" = yd_fbcfc,
+  "Export" = yd_expc,
+  "Import" = yd_impc
+  ) %>% 
+  pivot_longer(cols = everything(), values_to = "sd") %>% 
+  mutate(sd_y =  sd/sd[1])
+```
+
+```{r}
+acf_1 <- merged_cicles %>% 
+  summarise(across(everything(), acf1)) %>% 
+  rename(
+    "PIB" = y_pmc,
+  "VA agro" = ys_agrc,
+  "VA ind" = ys_indc,
+  "VA serv" = ys_serc,
+  "Consumo fam" = yd_cfc,
+  "Consumo gov" = yd_cgc,
+  "FBCF" = yd_fbcfc,
+  "Export" = yd_expc,
+  "Import" = yd_impc
+  ) %>% 
+  pivot_longer(cols = everything(), values_to = "acf1")
+
+```
+
+
+```{r}
+cor_y <- merged_cicles %>% 
+  cor() %>%
+  as_tibble(rownames = NA) %>% 
+  slice(1) %>% 
+  rename(
+    "PIB" = y_pmc,
+  "VA agro" = ys_agrc,
+  "VA ind" = ys_indc,
+  "VA serv" = ys_serc,
+  "Consumo fam" = yd_cfc,
+  "Consumo gov" = yd_cgc,
+  "FBCF" = yd_fbcfc,
+  "Export" = yd_expc,
+  "Import" = yd_impc
+  ) %>%
+  pivot_longer(cols = everything(), values_to = "cor")
+
+```
+
+```{r}
+inner_join(sd_y,
+      acf_1,
+      by = "name") %>% 
+  inner_join(cor_y,
+             by = "name") %>% 
+  knitr::kable(digits = 3, 
+               col.names = c("Componente Cíclico",
+                             "SD",
+                             "SD relativo ao PIB",
+                             "Autocorrelação de grau 1",
+                             "Correlação instantânea com PIB"),
+               caption = "Estatísticas de resumo dos ciclos")
+```
+
+
